@@ -1,10 +1,8 @@
 use std::time::Duration;
 
-use engine::{
-    Context, Engine, GameState, run
-};
-use engine::types::{Color, Rect, Vec2, Vec2F, VirtualKeyCode, WinitInputHelper};
 use engine::drawing::draw_rectangle;
+use engine::types::{Color, Rect, Vec2, Vec2F, VirtualKeyCode, WinitInputHelper};
+use engine::{run, Context, Engine, GameState};
 
 const SCREEN_WIDTH: u32 = 320;
 const SCREEN_HEIGHT: u32 = 240;
@@ -36,7 +34,11 @@ impl Default for Level {
         repr += "#.........................#.###.###.#...........................";
         repr += "#.........................#.........#...........................";
         repr += "#.........................###########...........................";
-        Self { width, height, repr }
+        Self {
+            width,
+            height,
+            repr,
+        }
     }
 }
 
@@ -46,7 +48,9 @@ struct Camera {
 
 impl Default for Camera {
     fn default() -> Self {
-        Self {pos: Vec2F::new(0.0, 0.0)}
+        Self {
+            pos: Vec2F::new(0.0, 0.0),
+        }
     }
 }
 
@@ -87,8 +91,19 @@ impl Game {
         let level = Level::default();
         let camera = Camera::default();
         let player = Player::default();
-        let movement_keys = [VirtualKeyCode::Up, VirtualKeyCode::Down, VirtualKeyCode::Left, VirtualKeyCode::Right] ;
-        Self { ctx, level, camera, player, movement_keys }
+        let movement_keys = [
+            VirtualKeyCode::Up,
+            VirtualKeyCode::Down,
+            VirtualKeyCode::Left,
+            VirtualKeyCode::Right,
+        ];
+        Self {
+            ctx,
+            level,
+            camera,
+            player,
+            movement_keys,
+        }
     }
 }
 
@@ -104,8 +119,12 @@ fn any_key_held(input: &WinitInputHelper, keys: &[VirtualKeyCode]) -> bool {
 impl Game {
     #[inline(always)]
     fn get_tile(&self, x: i32, y: i32) -> char {
-        if x >= 0 && x < self.level.width as i32 && y >= 0 && y < self.level.height as i32{
-            self.level.repr.chars().nth((y * self.level.width as i32 + x) as usize).unwrap()
+        if x >= 0 && x < self.level.width as i32 && y >= 0 && y < self.level.height as i32 {
+            self.level
+                .repr
+                .chars()
+                .nth((y * self.level.width as i32 + x) as usize)
+                .unwrap()
         } else {
             ' '
         }
@@ -149,38 +168,45 @@ impl GameState for Game {
         new_position.y = self.player.pos.y + self.player.vel.y;
 
         // Collision handling
-        if self.player.vel.x <= 0.0 { // moving left
-            if self.get_tile(new_position.x as i32, self.player.pos.y as i32) != '.' ||
-                self.get_tile(new_position.x as i32, (self.player.pos.y + 0.9) as i32) != '.' {
-                    new_position.x = new_position.x.trunc() + 1.0;
-                    self.player.vel.x = 0.0;
-                    println!("Collision x left");
+        if self.player.vel.x <= 0.0 {
+            // moving left
+            if self.get_tile(new_position.x as i32, self.player.pos.y as i32) != '.'
+                || self.get_tile(new_position.x as i32, (self.player.pos.y + 0.9) as i32) != '.'
+            {
+                new_position.x = new_position.x.trunc() + 1.0;
+                self.player.vel.x = 0.0;
             }
-        } else { // moving right
-            if self.get_tile((new_position.x + 1.0) as i32, self.player.pos.y as i32) != '.' ||
-                self.get_tile((new_position.x + 1.0) as i32, (self.player.pos.y + 0.9) as i32) != '.' {
-                    new_position.x = new_position.x.trunc();
-                    self.player.vel.x = 0.0;
-                    println!("Collision x right");
+        } else {
+            // moving right
+            if self.get_tile((new_position.x + 1.0) as i32, self.player.pos.y as i32) != '.'
+                || self.get_tile(
+                    (new_position.x + 1.0) as i32,
+                    (self.player.pos.y + 0.9) as i32,
+                ) != '.'
+            {
+                new_position.x = new_position.x.trunc();
+                self.player.vel.x = 0.0;
             }
         }
-        if self.player.vel.y <= 0.0 { // moving up
-            if self.get_tile(new_position.x as i32, new_position.y as i32) != '.' ||
-                self.get_tile((new_position.x + 0.9) as i32, new_position.y as i32) != '.' {
-                    new_position.y = new_position.y.trunc() + 1.0;
-                    self.player.vel.y = 0.0;
-                    println!("Collision y up");
+        if self.player.vel.y <= 0.0 {
+            // moving up
+            if self.get_tile(new_position.x as i32, new_position.y as i32) != '.'
+                || self.get_tile((new_position.x + 0.9) as i32, new_position.y as i32) != '.'
+            {
+                new_position.y = new_position.y.trunc() + 1.0;
+                self.player.vel.y = 0.0;
             }
-        } else { // moving down
-            if self.get_tile(new_position.x as i32, (new_position.y + 1.0) as i32) != '.' ||
-                self.get_tile((new_position.x + 0.9) as i32, (new_position.y + 1.0) as i32) != '.' {
-                    new_position.y = new_position.y.trunc();
-                    self.player.vel.y = 0.0;
-                    println!("Collision y down");
+        } else {
+            // moving down
+            if self.get_tile(new_position.x as i32, (new_position.y + 1.0) as i32) != '.'
+                || self.get_tile((new_position.x + 0.9) as i32, (new_position.y + 1.0) as i32)
+                    != '.'
+            {
+                new_position.y = new_position.y.trunc();
+                self.player.vel.y = 0.0;
             }
         }
 
-        
         self.player.pos = new_position;
         self.camera.pos = self.player.pos;
 
@@ -203,7 +229,7 @@ impl GameState for Game {
 
         let tile_offset_x = (offset_x - offset_x.trunc()) * TILE_WIDTH as f32;
         let tile_offset_y = (offset_y - offset_y.trunc()) * TILE_WIDTH as f32;
-        
+
         for x in -1..(visible_tiles_x + 1) as i32 {
             for y in -1..(visible_tiles_y + 1) as i32 {
                 let tile_id = self.get_tile(x + offset_x as i32, y + offset_y as i32);
@@ -213,16 +239,16 @@ impl GameState for Game {
                         y * TILE_WIDTH as i32 + 1 - tile_offset_y as i32,
                     ),
                     TILE_WIDTH - 1,
-                    TILE_HEIGHT - 1
+                    TILE_HEIGHT - 1,
                 );
                 match tile_id {
                     '.' => {
                         draw_rectangle(rect, screen, Color::new(255, 0, 255, 255));
-                    },
+                    }
                     '#' => {
                         draw_rectangle(rect, screen, Color::new(0, 255, 255, 255));
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 };
             }
         }
