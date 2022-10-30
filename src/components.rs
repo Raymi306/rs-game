@@ -16,11 +16,11 @@ macro_rules! default_vec2f {
         impl Default for $name {
             fn default() -> Self {
                 Self {
-                    0: Vec2F::new(0.0, 0.0)
+                    0: Vec2F::new(0.0, 0.0),
                 }
             }
         }
-    }
+    };
 }
 
 macro_rules! as_scalar {
@@ -63,6 +63,6 @@ pub struct Camera;
 
 #[derive(Bundle, Default)]
 pub struct CameraBundle {
-    camera: Camera,
+    pub camera: Camera,
     pub position: Position,
 }
