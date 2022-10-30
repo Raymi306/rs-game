@@ -7,6 +7,23 @@ use engine::{run, Context, Engine, GameState};
 const SCREEN_WIDTH: u32 = 320;
 const SCREEN_HEIGHT: u32 = 240;
 
+struct ControlBindings {
+    up: Vec<VirtualKeyCode>,
+    down: Vec<VirtualKeyCode>,
+    left: Vec<VirtualKeyCode>,
+    right: Vec<VirtualKeyCode>,
+}
+
+impl Default for ControlBindings {
+    fn default() -> Self {
+        let up = vec![VirtualKeyCode::W, VirtualKeyCode::Up];
+        let down = vec![VirtualKeyCode::S, VirtualKeyCode::Down];
+        let left = vec![VirtualKeyCode::A, VirtualKeyCode::Left];
+        let right = vec![VirtualKeyCode::D, VirtualKeyCode::Right];
+        Self { up, down, left, right }
+    }
+}
+
 struct Level {
     width: u32,
     height: u32,
@@ -78,7 +95,8 @@ struct Game {
     level: Level,
     camera: Camera,
     player: Player,
-    movement_keys: [VirtualKeyCode; 4],
+    controls: ControlBindings,
+    movement_bindings: Vec<VirtualKeyCode>,
 }
 
 impl Game {
@@ -91,18 +109,20 @@ impl Game {
         let level = Level::default();
         let camera = Camera::default();
         let player = Player::default();
-        let movement_keys = [
-            VirtualKeyCode::Up,
-            VirtualKeyCode::Down,
-            VirtualKeyCode::Left,
-            VirtualKeyCode::Right,
-        ];
+        let controls = ControlBindings::default();
+        let mut movement_bindings = Vec::with_capacity(8);
+        movement_bindings.extend(&controls.up);
+        movement_bindings.extend(&controls.down);
+        movement_bindings.extend(&controls.left);
+        movement_bindings.extend(&controls.right);
+
         Self {
             ctx,
             level,
             camera,
             player,
-            movement_keys,
+            controls,
+            movement_bindings,
         }
     }
 }
@@ -141,16 +161,16 @@ impl GameState for Game {
         screen.clear(Color::new(50, 50, 193, 255));
 
         let mut direction = Vec2F::new(0.0, 0.0);
-        if engine.input.key_held(VirtualKeyCode::Up) {
+        if any_key_held(&engine.input, &self.controls.up) {
             direction.y = -1.0;
         }
-        if engine.input.key_held(VirtualKeyCode::Down) {
+        if any_key_held(&engine.input, &self.controls.down) {
             direction.y = 1.0;
         }
-        if engine.input.key_held(VirtualKeyCode::Left) {
+        if any_key_held(&engine.input, &self.controls.left) {
             direction.x = -1.0;
         }
-        if engine.input.key_held(VirtualKeyCode::Right) {
+        if any_key_held(&engine.input, &self.controls.right) {
             direction.x = 1.0;
         }
 
