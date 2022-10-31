@@ -23,6 +23,18 @@ macro_rules! default_vec2f {
     };
 }
 
+macro_rules! new_vec2f {
+    ($name : ident) => {
+        impl $name {
+            pub const fn new(x: f32, y: f32) -> Self {
+                Self {
+                    0: Vec2F::new(x, y),
+                }
+            }
+        }
+    };
+}
+
 macro_rules! as_scalar {
     ($name : ident, $type : ident) => {
         impl $name {
@@ -33,19 +45,32 @@ macro_rules! as_scalar {
     };
 }
 
+macro_rules! new_scalar {
+    ($name : ident, $type : ident) => {
+        impl $name {
+            pub const fn new(val: $type) -> Self {
+                Self { 0: val }
+            }
+        }
+    };
+}
+
 #[derive(Component)]
 pub struct Position(pub Vec2F);
 as_vec2f!(Position);
 default_vec2f!(Position);
+new_vec2f!(Position);
 
 #[derive(Component)]
 pub struct Velocity(pub Vec2F);
 as_vec2f!(Velocity);
 default_vec2f!(Velocity);
+new_vec2f!(Velocity);
 
 #[derive(Component, Default)]
 pub struct Speed(pub f32);
 as_scalar!(Speed, f32);
+new_scalar!(Speed, f32);
 
 #[derive(Component, Default)]
 pub struct Player;

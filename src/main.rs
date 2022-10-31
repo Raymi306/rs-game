@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use bevy_ecs::prelude::*;
-use engine::types::{Color, Vec2, Vec2F, VirtualKeyCode};
+use engine::types::{Color, Vec2, VirtualKeyCode};
 use engine::{run, Context, Engine, GameState};
 
 mod components;
@@ -11,14 +11,16 @@ use resources::*;
 mod systems;
 use systems::*;
 mod render;
-mod util;
 use render::*;
+mod util;
 
 const SCREEN_WIDTH: u32 = 320;
 const SCREEN_HEIGHT: u32 = 240;
+const SCREEN_DIM: Vec2 = Vec2::new(SCREEN_WIDTH as i32, SCREEN_HEIGHT as i32);
 
 const TILE_WIDTH: u32 = 16;
 const TILE_HEIGHT: u32 = 16;
+const TILE_DIM: Vec2 = Vec2::new(TILE_WIDTH as i32, TILE_HEIGHT as i32);
 
 struct Game {
     ctx: Context,
@@ -33,13 +35,11 @@ impl Game {
             screen_height: SCREEN_HEIGHT,
             vsync_enabled: false,
         };
-        let mut world = bevy_ecs::world::World::new();
+        let mut world = World::new();
         world.spawn().insert_bundle(CameraBundle::default());
         world.spawn().insert_bundle(PlayerBundle {
-            position: Position {
-                0: Vec2F::new(1.0, 1.0),
-            },
-            speed: Speed { 0: 7.0 },
+            position: Position::new(1.0, 1.0),
+            speed: Speed::new(7.0),
             ..Default::default()
         });
         world.insert_resource(Level::new_test());
@@ -92,12 +92,8 @@ impl GameState for Game {
         let player_pos = player_pos.as_vec2f();
         let level = self.world.resource::<Level>();
 
-        // Make new funcs const ----------------------------------------------
-        let screen_dim = Vec2::new(SCREEN_WIDTH as i32, SCREEN_HEIGHT as i32);
-        let tile_dim = Vec2::new(TILE_WIDTH as i32, TILE_HEIGHT as i32);
-        // -------------------------------------------------------------------
         // Could be systems? -------------------------------------------------
-        let visible_tiles = get_visible_tiles(screen_dim, tile_dim);
+        let visible_tiles = get_visible_tiles(SCREEN_DIM, TILE_DIM);
         let camera_offset = get_camera_offset(cam_pos, visible_tiles, level);
         let tile_offset = get_tile_offset(camera_offset, TILE_WIDTH);
         // -------------------------------------------------------------------
@@ -106,10 +102,10 @@ impl GameState for Game {
             camera_offset,
             tile_offset,
             &level,
-            tile_dim,
+            TILE_DIM,
             screen,
         );
-        render_player(player_pos, camera_offset, tile_dim, screen);
+        render_player(player_pos, camera_offset, TILE_DIM, screen);
 
         true
     }
