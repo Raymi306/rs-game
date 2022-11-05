@@ -1,21 +1,34 @@
 use std::time::Duration;
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::schedule::ShouldRun;
 use engine::types::{Vec2, Vec2F, VirtualKeyCode, WinitInputHelper};
 
 use crate::components::*;
 use crate::resources::*;
 use crate::util::*;
+use crate::GameRunMode;
 
-pub fn handle_debug(
-    query: Query<(&Player, &Position)>,
-    input: Res<WinitInputHelper>,
-    level: Res<Level>,
-) {
-    let (_, pos) = query.single();
-    if input.key_released(VirtualKeyCode::Space) {
-        println!("Player position: {:?}", pos.0);
-        println!("Collision positions: {:?}", level.collision);
+pub fn is_in_game(state: Res<GameRunMode>) -> ShouldRun {
+    match state.as_ref() {
+        GameRunMode::Game => ShouldRun::Yes,
+        _ => ShouldRun::No,
+    }
+}
+
+pub fn is_in_main_menu(state: Res<GameRunMode>) -> ShouldRun {
+    match state.as_ref() {
+        GameRunMode::MainMenu => ShouldRun::Yes,
+        _ => ShouldRun::No,
+    }
+}
+
+pub fn handle_spacebar(input: Res<WinitInputHelper>, mut state: ResMut<GameRunMode>) {
+    if input.key_pressed(VirtualKeyCode::Space) {
+        *state = match *state {
+            GameRunMode::MainMenu => GameRunMode::Game,
+            GameRunMode::Game => GameRunMode::MainMenu,
+        }
     }
 }
 
@@ -50,8 +63,7 @@ pub fn handle_player_movement(
 
     let target_velocity = direction * spd * elapsed_time.as_secs_f32();
     let friction = 0.049;
-    vel.0.x = vel.0.x + (target_velocity.x - vel.0.x) * friction;
-    vel.0.y = vel.0.y + (target_velocity.y - vel.0.y) * friction;
+    vel.0 = vel.0 + ((target_velocity - vel.0) * friction);
     if !any_key_held(input, move_binds.as_ref()) {
         if f32::abs(vel.0.x) < 0.01 {
             vel.0.x = 0.0;
@@ -65,20 +77,25 @@ pub fn handle_player_movement(
 pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level: Res<Level>) {
     let level = level.as_ref();
     for (mut pos, mut vel) in &mut query {
-        let mut new_position = Vec2F::new(0.0, 0.0);
-        new_position.x = pos.0.x + vel.0.x;
-        new_position.y = pos.0.y + vel.0.y;
+        let mut new_position = pos.0 + vel.0;
+        let leeway = 0.9_f32;
 
         // Collision handling
         if vel.0.x <= 0.0 {
             // moving left
             if level
                 .collision
-                .get(&Vec2::new(new_position.x.floor() as i32, pos.0.y.floor() as i32))
+                .get(&Vec2::new(
+                    new_position.x.floor() as i32,
+                    pos.0.y.floor() as i32,
+                ))
                 .is_some()
                 || level
                     .collision
-                    .get(&Vec2::new(new_position.x.floor() as i32, (pos.0.y + 0.9).floor() as i32))
+                    .get(&Vec2::new(
+                        new_position.x.floor() as i32,
+                        (pos.0.y + leeway).floor() as i32,
+                    ))
                     .is_some()
             {
                 new_position.x = new_position.x.floor() + 1.0;
@@ -88,13 +105,16 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             // moving right
             if level
                 .collision
-                .get(&Vec2::new((new_position.x + 1.0).floor() as i32, pos.0.y.floor() as i32))
+                .get(&Vec2::new(
+                    (new_position.x + 1.0).floor() as i32,
+                    pos.0.y.floor() as i32,
+                ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
                         (new_position.x + 1.0).floor() as i32,
-                        (pos.0.y + 0.9).floor() as i32,
+                        (pos.0.y + leeway).floor() as i32,
                     ))
                     .is_some()
             {
@@ -106,12 +126,15 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             // moving up
             if level
                 .collision
-                .get(&Vec2::new(new_position.x.floor() as i32, new_position.y.floor() as i32))
+                .get(&Vec2::new(
+                    new_position.x.floor() as i32,
+                    new_position.y.floor() as i32,
+                ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
-                        (new_position.x + 0.9).floor() as i32,
+                        (new_position.x + leeway).floor() as i32,
                         new_position.y.floor() as i32,
                     ))
                     .is_some()
@@ -125,14 +148,14 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
                 .collision
                 .get(&Vec2::new(
                     new_position.x.floor() as i32,
-                    (new_position.y + 1.0).floor()  as i32,
+                    (new_position.y + 1.0).floor() as i32,
                 ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
-                        (new_position.x + 0.9).floor()  as i32,
-                        (new_position.y + 1.0).floor()  as i32,
+                        (new_position.x + leeway).floor() as i32,
+                        (new_position.y + 1.0).floor() as i32,
                     ))
                     .is_some()
             {
@@ -151,4 +174,34 @@ pub fn handle_player_camera(
     let (_, mut cam_pos) = camera_query.single_mut();
     let (_, player_pos) = player_query.single();
     cam_pos.0 = player_pos.0;
+}
+
+pub fn get_visible_tiles(screen: Res<Screen>, mut tile_meta: ResMut<TileMeta>) {
+    tile_meta.visible.x = screen.dim.x / tile_meta.dim.x;
+    tile_meta.visible.y = screen.dim.y / tile_meta.dim.y;
+}
+
+pub fn get_camera_offset(mut query: Query<(&mut Camera, &mut Position)>, tile_meta: Res<TileMeta>) {
+    let (mut camera, pos) = query.single_mut();
+    camera.offset.x = pos.0.x - tile_meta.visible.x as f32 / 2.0;
+    camera.offset.y = pos.0.y - tile_meta.visible.y as f32 / 2.0;
+
+    /*
+    if offset_x < 0.0 {
+        offset_x = 0.0;
+    } else if offset_x > (level.dimensions.x - visible_tiles.x) as f32 {
+        offset_x = (level.dimensions.x - visible_tiles.x) as f32;
+    }
+    if offset_y < 0.0 {
+        offset_y = 0.0;
+    } else if offset_y > (level.dimensions.y - visible_tiles.y) as f32 {
+        offset_y = (level.dimensions.y - visible_tiles.y) as f32;
+    }
+    */
+}
+
+pub fn get_tile_offset(query: Query<&Camera>, mut tile_meta: ResMut<TileMeta>) {
+    let camera = query.single();
+    tile_meta.offset.x = (camera.offset.x - camera.offset.x.trunc()) * tile_meta.dim.x as f32;
+    tile_meta.offset.y = (camera.offset.y - camera.offset.y.trunc()) * tile_meta.dim.y as f32;
 }

@@ -1,39 +1,8 @@
-use engine::drawing::{blit_rect, blit_rect_with_alpha, draw_rectangle};
+use engine::drawing::{blit_rect, blit_rect_with_alpha, draw_rectangle, draw_text};
 use engine::types::{Color, Rect, Vec2, Vec2F};
 use engine::{Engine, Screen};
 
-use crate::resources::Level;
-
-pub fn get_visible_tiles(screen_dim: Vec2, tile_dim: Vec2) -> Vec2 {
-    let visible_tiles_x = screen_dim.x / tile_dim.x;
-    let visible_tiles_y = screen_dim.y / tile_dim.y;
-    Vec2::new(visible_tiles_x, visible_tiles_y)
-}
-
-pub fn get_camera_offset(cam_pos: Vec2F, visible_tiles: Vec2, level: &Level) -> Vec2F {
-    let offset_x = cam_pos.x - visible_tiles.x as f32 / 2.0;
-    let offset_y = cam_pos.y - visible_tiles.y as f32 / 2.0;
-
-    /*
-    if offset_x < 0.0 {
-        offset_x = 0.0;
-    } else if offset_x > (level.dimensions.x - visible_tiles.x) as f32 {
-        offset_x = (level.dimensions.x - visible_tiles.x) as f32;
-    }
-    if offset_y < 0.0 {
-        offset_y = 0.0;
-    } else if offset_y > (level.dimensions.y - visible_tiles.y) as f32 {
-        offset_y = (level.dimensions.y - visible_tiles.y) as f32;
-    }
-    */
-    Vec2F::new(offset_x, offset_y)
-}
-
-pub fn get_tile_offset(camera_offset: Vec2F, tile_width: u32) -> Vec2F {
-    let tile_offset_x = (camera_offset.x - camera_offset.x.trunc()) * tile_width as f32;
-    let tile_offset_y = (camera_offset.y - camera_offset.y.trunc()) * tile_width as f32;
-    Vec2F::new(tile_offset_x, tile_offset_y)
-}
+use crate::resources::*;
 
 pub fn render_tiles(
     visible_tiles: Vec2,
@@ -86,24 +55,37 @@ pub fn render_tiles(
         }
     }
 }
-pub fn render_collision(visible_tiles: Vec2, camera_offset: Vec2F, tile_offset: Vec2F,
-                         level: &Level, tile_dim: Vec2, engine: &mut Engine) {
+pub fn render_collision(
+    visible_tiles: Vec2,
+    camera_offset: Vec2F,
+    tile_offset: Vec2F,
+    level: &Level,
+    tile_dim: Vec2,
+    engine: &mut Engine,
+) {
     for x in -1..(visible_tiles.x + 1) {
         for y in -1..(visible_tiles.y + 1) {
-            if let Some(tile) = level.collision.get(&Vec2::new(
-                x + camera_offset.x as i32,
-                y + camera_offset.y as i32,
-            )) {
+            if level
+                .collision
+                .get(&Vec2::new(
+                    x + camera_offset.x as i32,
+                    y + camera_offset.y as i32,
+                ))
+                .is_some()
+            {
                 let collision_rect = Rect::new(
                     Vec2::new(
                         (x as f32 * tile_dim.x as f32 - tile_offset.x) as i32,
                         (y as f32 * tile_dim.y as f32 - tile_offset.y) as i32,
-                        ),
-                        tile_dim.x as u32,
-                        tile_dim.y as u32,
-                        );
-                draw_rectangle(collision_rect, &mut engine.screen, Color::new(255, 0, 0, 255));
-
+                    ),
+                    tile_dim.x as u32,
+                    tile_dim.y as u32,
+                );
+                draw_rectangle(
+                    collision_rect,
+                    &mut engine.screen,
+                    Color::new(255, 0, 0, 255),
+                );
             }
         }
     }
@@ -118,4 +100,20 @@ pub fn render_player(player_pos: Vec2F, camera_offset: Vec2F, tile_dim: Vec2, sc
         tile_dim.y as u32,
     );
     draw_rectangle(player_rect, screen, Color::new(255, 255, 255, 255));
+}
+
+pub fn render_main_menu(resources: &MainMenuResources, engine: &mut Engine) {
+    let font = engine
+        .resource_manager
+        .get_font(resources.font_handle)
+        .unwrap();
+    draw_text(
+        font,
+        &mut engine.font_helper.default_layout,
+        "Press Spacebar to Toggle Modes",
+        20.0,
+        Color::new(255, 255, 255, 255),
+        &mut engine.screen,
+        Vec2 { x: 20, y: 20 },
+    );
 }

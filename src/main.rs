@@ -2,8 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use bevy_ecs::prelude::*;
-use engine::resource::Handle;
-use engine::types::{Color, Vec2, VirtualKeyCode};
+use engine::types::{Color, FontSettings, Vec2, Vec2F, VirtualKeyCode};
 use engine::{run, Context, Engine, GameState};
 
 mod components;
@@ -18,23 +17,27 @@ mod file;
 mod util;
 use file::*;
 
-const SCREEN_WIDTH: u32 = 1024;
-const SCREEN_HEIGHT: u32 = 768;
+const SCREEN_WIDTH: u32 = 320;
+const SCREEN_HEIGHT: u32 = 240;
 const SCREEN_DIM: Vec2 = Vec2::new(SCREEN_WIDTH as i32, SCREEN_HEIGHT as i32);
 
 const TILE_WIDTH: u32 = 32;
 const TILE_HEIGHT: u32 = 32;
 const TILE_DIM: Vec2 = Vec2::new(TILE_WIDTH as i32, TILE_HEIGHT as i32);
 
+pub enum GameRunMode {
+    MainMenu,
+    Game,
+}
+
 struct Game {
     ctx: Context,
     world: World,
     schedule: Schedule,
-    handles: Vec<Handle>,
 }
 
 impl Game {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let ctx = Context {
             screen_width: SCREEN_WIDTH,
             screen_height: SCREEN_HEIGHT,
@@ -54,37 +57,94 @@ impl Game {
         movement_bindings.extend(&controls.down);
         movement_bindings.extend(&controls.left);
         movement_bindings.extend(&controls.right);
+        world.insert_resource(GameRunMode::MainMenu);
         world.insert_resource(movement_bindings);
+        world.insert_resource(Screen { dim: SCREEN_DIM });
+        world.insert_resource(TileMeta {
+            dim: TILE_DIM,
+            visible: Vec2::new(0, 0),
+            offset: Vec2F::new(0.0, 0.0),
+        });
         let mut schedule = Schedule::default();
         schedule.add_stage(
-            "update",
+            "always",
+            SystemStage::parallel().with_system(handle_spacebar),
+        );
+        schedule.add_stage(
+            "update_game",
             SystemStage::parallel()
+                .with_run_criteria(is_in_game)
                 .with_system(handle_player_movement)
                 .with_system(handle_collision)
-                .with_system(handle_player_camera),
+                .with_system(handle_player_camera)
+                .with_system(get_visible_tiles)
+                .with_system(get_camera_offset.before(get_tile_offset))
+                .with_system(get_tile_offset),
         );
 
         Self {
             ctx,
             world,
             schedule,
-            handles: Vec::new(),
         }
+    }
+    fn game_update(&mut self, engine: &mut Engine) {
+        let cam = self.world.query::<&Camera>().single(&self.world);
+        let cam_offset = cam.offset.clone();
+        let (_, player_pos) = self
+            .world
+            .query::<(&Player, &Position)>()
+            .single(&self.world);
+        let player_pos = player_pos.as_vec2f();
+        let level = self.world.resource::<Level>();
+        let tile_meta = self.world.resource::<TileMeta>();
+        {
+            let screen = &mut engine.screen;
+            screen.clear(Color::new(50, 50, 193, 255));
+        }
+        render_tiles(
+            tile_meta.visible,
+            cam_offset,
+            tile_meta.offset,
+            &level,
+            TILE_DIM,
+            engine,
+        );
+        let screen = &mut engine.screen;
+        render_player(player_pos, cam_offset, TILE_DIM, screen);
+    }
+    fn main_menu_update(&mut self, engine: &mut Engine) {
+        {
+            let screen = &mut engine.screen;
+            screen.clear(Color::new(255, 50, 193, 255));
+        }
+        let mmr = self.world.resource::<MainMenuResources>();
+        render_main_menu(mmr, engine);
     }
 }
 
 impl GameState for Game {
     fn on_create(&mut self, engine: &mut Engine) -> bool {
-        let handle = engine
+        let image_handle = engine
             .resource_manager
             .load_image(Path::new("resources/images/level_1_spritesheet.png"));
         self.world.insert_resource(load_level(
             //Path::new("resources/maps/collision_test.lvl"),
             Path::new("resources/maps/level_1.lvl"),
             "Level 1",
-            handle,
+            image_handle,
         ));
-        self.handles.push(handle);
+        let settings = FontSettings {
+            scale: 10.0,
+            ..FontSettings::default()
+        };
+        let font_handle = engine.resource_manager.load_font(
+            Path::new("resources/fonts/JetbrainsMonoRegular.ttf"),
+            settings,
+        );
+        self.world
+            .insert_resource(MainMenuResources { font_handle });
+
         true
     }
     fn on_update(&mut self, elapsed_time: Duration, engine: &mut Engine) -> bool {
@@ -94,38 +154,11 @@ impl GameState for Game {
         self.world.insert_resource(elapsed_time);
         self.world.insert_resource(engine.input.clone());
         self.schedule.run(&mut self.world);
-        {
-            let screen = &mut engine.screen;
-            screen.clear(Color::new(50, 50, 193, 255));
-        }
-
-        let (_, cam_pos) = self
-            .world
-            .query::<(&Camera, &Position)>()
-            .single(&self.world);
-        let cam_pos = cam_pos.as_vec2f();
-        let (_, player_pos) = self
-            .world
-            .query::<(&Player, &Position)>()
-            .single(&self.world);
-        let player_pos = player_pos.as_vec2f();
-        let level = self.world.resource::<Level>();
-
-        // Could be systems? -------------------------------------------------
-        let visible_tiles = get_visible_tiles(SCREEN_DIM, TILE_DIM);
-        let camera_offset = get_camera_offset(cam_pos, visible_tiles, level);
-        let tile_offset = get_tile_offset(camera_offset, TILE_WIDTH);
-        // -------------------------------------------------------------------
-        render_tiles(
-            visible_tiles,
-            camera_offset,
-            tile_offset,
-            &level,
-            TILE_DIM,
-            engine,
-        );
-        let screen = &mut engine.screen;
-        render_player(player_pos, camera_offset, TILE_DIM, screen);
+        let state = self.world.get_resource::<GameRunMode>().unwrap();
+        match state {
+            GameRunMode::Game => self.game_update(engine),
+            GameRunMode::MainMenu => self.main_menu_update(engine),
+        };
 
         true
     }

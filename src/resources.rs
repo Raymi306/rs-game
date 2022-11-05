@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use engine::resource::ImageHandle;
-use engine::types::{Vec2, VirtualKeyCode};
+use engine::resource::{FontHandle, ImageHandle};
+use engine::types::{Vec2, Vec2F, VirtualKeyCode};
 
 pub struct Level {
     pub name: String,
@@ -101,4 +101,18 @@ impl Default for ControlBindings {
             right,
         }
     }
+}
+
+pub struct Screen {
+    pub dim: Vec2,
+}
+
+pub struct TileMeta {
+    pub dim: Vec2,
+    pub visible: Vec2,
+    pub offset: Vec2F,
+}
+
+pub struct MainMenuResources {
+    pub font_handle: FontHandle,
 }

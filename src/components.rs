@@ -84,7 +84,9 @@ pub struct PlayerBundle {
 }
 
 #[derive(Component, Default)]
-pub struct Camera;
+pub struct Camera {
+    pub offset: Vec2F,
+}
 
 #[derive(Bundle, Default)]
 pub struct CameraBundle {
