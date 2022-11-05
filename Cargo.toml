@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 bevy_ecs = "0.8.1"
-engine = { git = "ssh://git@github.com/Raymi306/rs-game-engine" }
+engine = { git = "https://github.com/Raymi306/rs-game-engine" }

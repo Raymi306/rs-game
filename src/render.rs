@@ -1,9 +1,8 @@
-use engine::drawing::draw_rectangle;
+use engine::drawing::{blit_rect, blit_rect_with_alpha, draw_rectangle};
 use engine::types::{Color, Rect, Vec2, Vec2F};
-use engine::Screen;
+use engine::{Engine, Screen};
 
 use crate::resources::Level;
-use crate::util::*;
 
 pub fn get_visible_tiles(screen_dim: Vec2, tile_dim: Vec2) -> Vec2 {
     let visible_tiles_x = screen_dim.x / tile_dim.x;
@@ -12,19 +11,21 @@ pub fn get_visible_tiles(screen_dim: Vec2, tile_dim: Vec2) -> Vec2 {
 }
 
 pub fn get_camera_offset(cam_pos: Vec2F, visible_tiles: Vec2, level: &Level) -> Vec2F {
-    let mut offset_x = cam_pos.x - visible_tiles.x as f32 / 2.0;
-    let mut offset_y = cam_pos.y - visible_tiles.y as f32 / 2.0;
+    let offset_x = cam_pos.x - visible_tiles.x as f32 / 2.0;
+    let offset_y = cam_pos.y - visible_tiles.y as f32 / 2.0;
 
+    /*
     if offset_x < 0.0 {
         offset_x = 0.0;
-    } else if offset_x > (level.width - visible_tiles.x as u32) as f32 {
-        offset_x = (level.width - visible_tiles.x as u32) as f32;
+    } else if offset_x > (level.dimensions.x - visible_tiles.x) as f32 {
+        offset_x = (level.dimensions.x - visible_tiles.x) as f32;
     }
     if offset_y < 0.0 {
         offset_y = 0.0;
-    } else if offset_y > (level.height - visible_tiles.y as u32) as f32 {
-        offset_y = (level.height - visible_tiles.y as u32) as f32;
+    } else if offset_y > (level.dimensions.y - visible_tiles.y) as f32 {
+        offset_y = (level.dimensions.y - visible_tiles.y) as f32;
     }
+    */
     Vec2F::new(offset_x, offset_y)
 }
 
@@ -40,32 +41,70 @@ pub fn render_tiles(
     tile_offset: Vec2F,
     level: &Level,
     tile_dim: Vec2,
-    screen: &mut Screen,
+    engine: &mut Engine,
 ) {
+    let spritesheet = engine
+        .resource_manager
+        .get_image(level.spritesheet_handle)
+        .unwrap();
     for x in -1..(visible_tiles.x + 1) {
         for y in -1..(visible_tiles.y + 1) {
-            let tile_id = get_tile(
+            if let Some(tile) = level.background_tiles.get(&Vec2::new(
                 x + camera_offset.x as i32,
                 y + camera_offset.y as i32,
-                level,
-            );
-            let rect = Rect::new(
-                Vec2::new(
-                    x * tile_dim.x + 1 - tile_offset.x as i32,
-                    y * tile_dim.x + 1 - tile_offset.y as i32,
-                ),
-                (tile_dim.x - 1) as u32,
-                (tile_dim.y - 1) as u32,
-            );
-            match tile_id {
-                '.' => {
-                    draw_rectangle(rect, screen, Color::new(255, 0, 255, 255));
-                }
-                '#' => {
-                    draw_rectangle(rect, screen, Color::new(0, 255, 255, 255));
-                }
-                _ => {}
-            };
+            )) {
+                let src_rect = Rect::new(
+                    Vec2::new(tile.x, tile.y),
+                    tile_dim.x as u32,
+                    tile_dim.y as u32,
+                );
+                let pos = Vec2::new(
+                    x * tile_dim.x - tile_offset.x as i32,
+                    y * tile_dim.y - tile_offset.y as i32,
+                );
+                blit_rect(spritesheet, src_rect, &mut engine.screen, pos);
+            }
+        }
+    }
+    for x in -1..(visible_tiles.x + 1) {
+        for y in -1..(visible_tiles.y + 1) {
+            if let Some(tile) = level.foreground_tiles.get(&Vec2::new(
+                x + camera_offset.x as i32,
+                y + camera_offset.y as i32,
+            )) {
+                let src_rect = Rect::new(
+                    Vec2::new(tile.x, tile.y),
+                    tile_dim.x as u32,
+                    tile_dim.y as u32,
+                );
+                let pos = Vec2::new(
+                    x * tile_dim.x - tile_offset.x as i32,
+                    y * tile_dim.y - tile_offset.y as i32,
+                );
+                blit_rect_with_alpha(spritesheet, src_rect, &mut engine.screen, pos);
+            }
+        }
+    }
+}
+pub fn render_collision(visible_tiles: Vec2, camera_offset: Vec2F, tile_offset: Vec2F,
+                         level: &Level, tile_dim: Vec2, engine: &mut Engine) {
+    for x in -1..(visible_tiles.x + 1) {
+        for y in -1..(visible_tiles.y + 1) {
+            if let Some(tile) = level.collision.get(&Vec2::new(
+                x + camera_offset.x as i32,
+                y + camera_offset.y as i32,
+            )) {
+                let collision_rect = Rect::new(
+                    Vec2::new(
+                        (x as f32 * tile_dim.x as f32 - tile_offset.x) as i32,
+                        (y as f32 * tile_dim.y as f32 - tile_offset.y) as i32,
+                        ),
+                        tile_dim.x as u32,
+                        tile_dim.y as u32,
+                        );
+                draw_rectangle(collision_rect, &mut engine.screen, Color::new(255, 0, 0, 255));
+
+            }
         }
     }
 }

@@ -1,11 +1,23 @@
 use std::time::Duration;
 
 use bevy_ecs::prelude::*;
-use engine::types::{Vec2F, VirtualKeyCode, WinitInputHelper};
+use engine::types::{Vec2, Vec2F, VirtualKeyCode, WinitInputHelper};
 
 use crate::components::*;
 use crate::resources::*;
 use crate::util::*;
+
+pub fn handle_debug(
+    query: Query<(&Player, &Position)>,
+    input: Res<WinitInputHelper>,
+    level: Res<Level>,
+) {
+    let (_, pos) = query.single();
+    if input.key_released(VirtualKeyCode::Space) {
+        println!("Player position: {:?}", pos.0);
+        println!("Collision positions: {:?}", level.collision);
+    }
+}
 
 pub fn handle_player_movement(
     mut query: Query<(&Player, &mut Velocity, &Speed)>,
@@ -60,39 +72,71 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
         // Collision handling
         if vel.0.x <= 0.0 {
             // moving left
-            if get_tile(new_position.x as i32, pos.0.y as i32, level) != '.'
-                || get_tile(new_position.x as i32, (pos.0.y + 0.9) as i32, level) != '.'
+            if level
+                .collision
+                .get(&Vec2::new(new_position.x.floor() as i32, pos.0.y.floor() as i32))
+                .is_some()
+                || level
+                    .collision
+                    .get(&Vec2::new(new_position.x.floor() as i32, (pos.0.y + 0.9).floor() as i32))
+                    .is_some()
             {
-                new_position.x = new_position.x.trunc() + 1.0;
+                new_position.x = new_position.x.floor() + 1.0;
                 vel.0.x = 0.0;
             }
         } else {
             // moving right
-            if get_tile((new_position.x + 1.0) as i32, pos.0.y as i32, level) != '.'
-                || get_tile((new_position.x + 1.0) as i32, (pos.0.y + 0.9) as i32, level) != '.'
+            if level
+                .collision
+                .get(&Vec2::new((new_position.x + 1.0).floor() as i32, pos.0.y.floor() as i32))
+                .is_some()
+                || level
+                    .collision
+                    .get(&Vec2::new(
+                        (new_position.x + 1.0).floor() as i32,
+                        (pos.0.y + 0.9).floor() as i32,
+                    ))
+                    .is_some()
             {
-                new_position.x = new_position.x.trunc();
+                new_position.x = new_position.x.floor();
                 vel.0.x = 0.0;
             }
         }
         if vel.0.y <= 0.0 {
             // moving up
-            if get_tile(new_position.x as i32, new_position.y as i32, level) != '.'
-                || get_tile((new_position.x + 0.9) as i32, new_position.y as i32, level) != '.'
+            if level
+                .collision
+                .get(&Vec2::new(new_position.x.floor() as i32, new_position.y.floor() as i32))
+                .is_some()
+                || level
+                    .collision
+                    .get(&Vec2::new(
+                        (new_position.x + 0.9).floor() as i32,
+                        new_position.y.floor() as i32,
+                    ))
+                    .is_some()
             {
-                new_position.y = new_position.y.trunc() + 1.0;
+                new_position.y = new_position.y.floor() + 1.0;
                 vel.0.y = 0.0;
             }
         } else {
             // moving down
-            if get_tile(new_position.x as i32, (new_position.y + 1.0) as i32, level) != '.'
-                || get_tile(
-                    (new_position.x + 0.9) as i32,
-                    (new_position.y + 1.0) as i32,
-                    level,
-                ) != '.'
+            if level
+                .collision
+                .get(&Vec2::new(
+                    new_position.x.floor() as i32,
+                    (new_position.y + 1.0).floor()  as i32,
+                ))
+                .is_some()
+                || level
+                    .collision
+                    .get(&Vec2::new(
+                        (new_position.x + 0.9).floor()  as i32,
+                        (new_position.y + 1.0).floor()  as i32,
+                    ))
+                    .is_some()
             {
-                new_position.y = new_position.y.trunc();
+                new_position.y = new_position.y.floor();
                 vel.0.y = 0.0;
             }
         }
