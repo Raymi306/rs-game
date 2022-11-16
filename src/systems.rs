@@ -7,7 +7,9 @@ use engine::types::{Vec2, Vec2F, VirtualKeyCode, WinitInputHelper};
 use crate::components::*;
 use crate::resources::*;
 use crate::util::*;
-use crate::GameRunMode;
+use crate::{GameRunMode, ShouldQuit};
+
+const BATCH_SIZE: usize = 1000;
 
 pub fn is_in_game(state: Res<GameRunMode>) -> ShouldRun {
     match state.as_ref() {
@@ -30,6 +32,36 @@ pub fn handle_spacebar(input: Res<WinitInputHelper>, mut state: ResMut<GameRunMo
             GameRunMode::Game => GameRunMode::MainMenu,
         }
     }
+}
+
+pub fn handle_quit_button(input: Res<WinitInputHelper>, mmr: Res<MainMenuResources>, mut should_quit: ResMut<ShouldQuit>) {
+    if input.mouse_pressed(0) {
+        if let Some((x, y)) = input.mouse() {
+            let resolution = input.resolution().unwrap();
+            let (x, y) = resolution_to_screen_space(resolution, (x, y));
+            if mmr.button_quit_bounds.point_intersects(Vec2::new(x as i32, y as i32)) {
+                *should_quit = true;
+            }
+        }
+    }
+}
+
+pub fn handle_enemy_movement(
+    mut enemy_query: Query<(&Enemy, &Position, &mut Velocity, &Speed), Without<Player>>,
+    player_query: Query<(&Player, &Position)>,
+    elapsed_time: Res<Duration>,
+) {
+    let (_, player_pos) = player_query.single();
+    enemy_query.par_for_each_mut(BATCH_SIZE, |(_, pos, mut vel, spd)| {
+        let distance = f32::sqrt(f32::powi(player_pos.0.x - pos.0.x, 2) + f32::powi(player_pos.0.y - pos.0.y, 2));
+        if distance < 3.5 && distance > 0.1 {
+            vel.0.x = ((player_pos.0.x - pos.0.x) / distance) * 2.0;
+            vel.0.y = ((player_pos.0.y - pos.0.y) / distance) * 2.0;
+            vel.0 *= elapsed_time.as_secs_f32();
+        } else {
+            vel.0 *= 0.97 * elapsed_time.as_secs_f32();
+        }
+    });
 }
 
 pub fn handle_player_movement(
@@ -76,7 +108,7 @@ pub fn handle_player_movement(
 
 pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level: Res<Level>) {
     let level = level.as_ref();
-    for (mut pos, mut vel) in &mut query {
+    query.par_for_each_mut(BATCH_SIZE, |(mut pos, mut vel)| {
         let mut new_position = pos.0 + vel.0;
         let leeway = 0.9_f32;
 
@@ -164,7 +196,7 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             }
         }
         pos.0 = new_position;
-    }
+    });
 }
 
 pub fn handle_player_camera(

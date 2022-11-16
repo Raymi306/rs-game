@@ -14,8 +14,10 @@ use systems::*;
 mod render;
 use render::*;
 mod file;
-mod util;
 use file::*;
+mod menu;
+use menu::*;
+mod util;
 
 const SCREEN_WIDTH: u32 = 320;
 const SCREEN_HEIGHT: u32 = 240;
@@ -29,6 +31,8 @@ pub enum GameRunMode {
     MainMenu,
     Game,
 }
+
+pub type ShouldQuit = bool;
 
 struct Game {
     ctx: Context,
@@ -50,6 +54,12 @@ impl Game {
             speed: Speed::new(7.0),
             ..Default::default()
         });
+        for i in 5..105 {
+            world.spawn().insert_bundle(EnemyBundle {
+                position: Position::new(i as f32, i as f32),
+                ..Default::default()
+            });
+        }
         world.insert_resource(ControlBindings::default());
         let controls = world.get_resource::<ControlBindings>().unwrap();
         let mut movement_bindings: Vec<VirtualKeyCode> = Vec::with_capacity(8); // magic number, expects 2 per control,
@@ -57,6 +67,8 @@ impl Game {
         movement_bindings.extend(&controls.down);
         movement_bindings.extend(&controls.left);
         movement_bindings.extend(&controls.right);
+        let should_quit: ShouldQuit = false;
+        world.insert_resource(should_quit);
         world.insert_resource(GameRunMode::MainMenu);
         world.insert_resource(movement_bindings);
         world.insert_resource(Screen { dim: SCREEN_DIM });
@@ -71,10 +83,17 @@ impl Game {
             SystemStage::parallel().with_system(handle_spacebar),
         );
         schedule.add_stage(
+            "update_menu",
+            SystemStage::parallel()
+                .with_run_criteria(is_in_main_menu)
+                .with_system(handle_quit_button)
+        );
+        schedule.add_stage(
             "update_game",
             SystemStage::parallel()
                 .with_run_criteria(is_in_game)
                 .with_system(handle_player_movement)
+                .with_system(handle_enemy_movement)
                 .with_system(handle_collision)
                 .with_system(handle_player_camera)
                 .with_system(get_visible_tiles)
@@ -87,6 +106,17 @@ impl Game {
             world,
             schedule,
         }
+    }
+    fn game_create(&mut self, engine: &mut Engine) {
+        let image_handle = engine
+            .resource_manager
+            .load_image(Path::new("resources/images/level_1_spritesheet.png"));
+        self.world.insert_resource(load_level(
+            Path::new("resources/maps/collision_test.lvl"),
+            //Path::new("resources/maps/level_1.lvl"),
+            "Level 1",
+            image_handle,
+        ));
     }
     fn game_update(&mut self, engine: &mut Engine) {
         let cam = self.world.query::<&Camera>().single(&self.world);
@@ -111,29 +141,13 @@ impl Game {
             engine,
         );
         let screen = &mut engine.screen;
+        let mut enemy_query = self.world.query::<(&Enemy, &Position)>();
+        for (_enemy, pos) in enemy_query.iter(&self.world) {
+            render_enemy(pos.0, cam_offset, TILE_DIM, screen);
+        }
         render_player(player_pos, cam_offset, TILE_DIM, screen);
     }
-    fn main_menu_update(&mut self, engine: &mut Engine) {
-        {
-            let screen = &mut engine.screen;
-            screen.clear(Color::new(255, 50, 193, 255));
-        }
-        let mmr = self.world.resource::<MainMenuResources>();
-        render_main_menu(mmr, engine);
-    }
-}
-
-impl GameState for Game {
-    fn on_create(&mut self, engine: &mut Engine) -> bool {
-        let image_handle = engine
-            .resource_manager
-            .load_image(Path::new("resources/images/level_1_spritesheet.png"));
-        self.world.insert_resource(load_level(
-            //Path::new("resources/maps/collision_test.lvl"),
-            Path::new("resources/maps/level_1.lvl"),
-            "Level 1",
-            image_handle,
-        ));
+    fn main_menu_create(&mut self, engine: &mut Engine) {
         let settings = FontSettings {
             scale: 10.0,
             ..FontSettings::default()
@@ -142,8 +156,33 @@ impl GameState for Game {
             Path::new("resources/fonts/JetbrainsMonoRegular.ttf"),
             settings,
         );
-        self.world
-            .insert_resource(MainMenuResources { font_handle });
+        let (button_1_handle, button_1_bounds) = create_centered_button(
+            engine, font_handle, "Press Space to Toggle", 20
+        );
+        let (button_quit_handle, button_quit_bounds) = create_centered_button(
+            engine, font_handle, "Quit", 70
+        );
+        self.world.insert_resource(MainMenuResources {
+            button_1_handle,
+            button_1_bounds,
+            button_quit_handle,
+            button_quit_bounds,
+        });
+    }
+    fn main_menu_update(&mut self, engine: &mut Engine) {
+        {
+            let screen = &mut engine.screen;
+            screen.clear(Color::new(13, 40, 183, 255));
+        }
+        let mmr = self.world.resource::<MainMenuResources>();
+        render_main_menu(mmr, engine);
+    }
+}
+
+impl GameState for Game {
+    fn on_create(&mut self, engine: &mut Engine) -> bool {
+        self.game_create(engine);
+        self.main_menu_create(engine);
 
         true
     }
@@ -154,13 +193,12 @@ impl GameState for Game {
         self.world.insert_resource(elapsed_time);
         self.world.insert_resource(engine.input.clone());
         self.schedule.run(&mut self.world);
-        let state = self.world.get_resource::<GameRunMode>().unwrap();
+        let state = self.world.resource::<GameRunMode>();
         match state {
             GameRunMode::Game => self.game_update(engine),
             GameRunMode::MainMenu => self.main_menu_update(engine),
         };
-
-        true
+        !*self.world.resource::<ShouldQuit>()
     }
     fn context(&self) -> &Context {
         &self.ctx

@@ -84,6 +84,17 @@ pub struct PlayerBundle {
 }
 
 #[derive(Component, Default)]
+pub struct Enemy;
+
+#[derive(Bundle, Default)]
+pub struct EnemyBundle {
+    pub enemy: Enemy,
+    pub position: Position,
+    pub velocity: Velocity,
+    pub speed: Speed,
+}
+
+#[derive(Component, Default)]
 pub struct Camera {
     pub offset: Vec2F,
 }

@@ -1,8 +1,12 @@
-use engine::drawing::{blit_rect, blit_rect_with_alpha, draw_rectangle, draw_text};
+use engine::drawing::{
+    blit_rect, blit_rect_with_alpha, blit_with_alpha, draw_rectangle,
+};
+use engine::resource::ImageResource;
 use engine::types::{Color, Rect, Vec2, Vec2F};
 use engine::{Engine, Screen};
 
 use crate::resources::*;
+use crate::SCREEN_WIDTH;
 
 pub fn render_tiles(
     visible_tiles: Vec2,
@@ -102,18 +106,21 @@ pub fn render_player(player_pos: Vec2F, camera_offset: Vec2F, tile_dim: Vec2, sc
     draw_rectangle(player_rect, screen, Color::new(255, 255, 255, 255));
 }
 
-pub fn render_main_menu(resources: &MainMenuResources, engine: &mut Engine) {
-    let font = engine
-        .resource_manager
-        .get_font(resources.font_handle)
-        .unwrap();
-    draw_text(
-        font,
-        &mut engine.font_helper.default_layout,
-        "Press Spacebar to Toggle Modes",
-        20.0,
-        Color::new(255, 255, 255, 255),
-        &mut engine.screen,
-        Vec2 { x: 20, y: 20 },
+pub fn render_enemy(pos: Vec2F, camera_offset: Vec2F, tile_dim: Vec2, screen: &mut Screen) {
+    let rect = Rect::new(
+        Vec2::new(
+            ((pos.x - camera_offset.x) * tile_dim.x as f32) as i32,
+            ((pos.y - camera_offset.y) * tile_dim.y as f32) as i32,
+        ),
+        tile_dim.x as u32,
+        tile_dim.y as u32,
     );
+    draw_rectangle(rect, screen, Color::new(255, 0, 0, 255));
+}
+
+pub fn render_main_menu(resources: &MainMenuResources, engine: &mut Engine) {
+    let btn_1 = engine.resource_manager.get_image(resources.button_1_handle).unwrap();
+    blit_with_alpha(btn_1, &mut engine.screen, resources.button_1_bounds.top_left);
+    let btn_2 = engine.resource_manager.get_image(resources.button_quit_handle).unwrap();
+    blit_with_alpha(btn_2, &mut engine.screen, resources.button_quit_bounds.top_left);
 }

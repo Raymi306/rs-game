@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use engine::resource::{FontHandle, ImageHandle};
-use engine::types::{Vec2, Vec2F, VirtualKeyCode};
+use engine::resource::ImageHandle;
+use engine::types::{Rect, Vec2, Vec2F, VirtualKeyCode};
 
 pub struct Level {
     pub name: String,
@@ -114,5 +114,8 @@ pub struct TileMeta {
 }
 
 pub struct MainMenuResources {
-    pub font_handle: FontHandle,
+    pub button_1_handle: ImageHandle,
+    pub button_1_bounds: Rect,
+    pub button_quit_handle: ImageHandle,
+    pub button_quit_bounds: Rect,
 }
