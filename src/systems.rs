@@ -94,13 +94,11 @@ pub fn handle_player_movement(
     }
 
     let target_velocity = direction * spd * elapsed_time.as_secs_f32();
-    let friction = 0.049;
+    let friction = 3.999 * elapsed_time.as_secs_f32();
     vel.0 = vel.0 + ((target_velocity - vel.0) * friction);
     if !any_key_held(input, move_binds.as_ref()) {
-        if f32::abs(vel.0.x) < 0.01 {
+        if vel.0.magnitude() < 0.001 {
             vel.0.x = 0.0;
-        }
-        if f32::abs(vel.0.y) < 0.01 {
             vel.0.y = 0.0;
         }
     }
