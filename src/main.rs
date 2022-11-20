@@ -54,12 +54,21 @@ impl Game {
             speed: Speed::new(7.0),
             ..Default::default()
         });
+        /*
         for i in 5..105 {
             world.spawn().insert_bundle(EnemyBundle {
                 position: Position::new(i as f32, i as f32),
                 ..Default::default()
             });
         }
+        */
+        world.spawn().insert_bundle(SmartEnemyBundle {
+            enemy: EnemyBundle {
+                position: Position::new(5.0, 5.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
         world.insert_resource(ControlBindings::default());
         let controls = world.get_resource::<ControlBindings>().unwrap();
         let mut movement_bindings: Vec<VirtualKeyCode> = Vec::with_capacity(8); // magic number, expects 2 per control,
@@ -86,14 +95,19 @@ impl Game {
             "update_menu",
             SystemStage::parallel()
                 .with_run_criteria(is_in_main_menu)
-                .with_system(handle_quit_button)
+                .with_system(handle_quit_button),
         );
         schedule.add_stage(
             "update_game",
             SystemStage::parallel()
                 .with_run_criteria(is_in_game)
+                .with_system(update_path_timers)
                 .with_system(handle_player_movement)
-                .with_system(handle_enemy_movement)
+                .with_system(update_player_trunc_pos)
+                .with_system(propagate_pathfinding_wave.after(update_player_trunc_pos))
+                .with_system(build_enemy_bfs_paths.after(propagate_pathfinding_wave))
+                .with_system(handle_enemy_path_movement.after(build_enemy_bfs_paths))
+                .with_system(handle_enemy_movement_dumb)
                 .with_system(handle_collision)
                 .with_system(handle_player_camera)
                 .with_system(get_visible_tiles)
@@ -120,12 +134,12 @@ impl Game {
     }
     fn game_update(&mut self, engine: &mut Engine) {
         let cam = self.world.query::<&Camera>().single(&self.world);
-        let cam_offset = cam.offset.clone();
+        let cam_offset = cam.offset;
         let (_, player_pos) = self
             .world
             .query::<(&Player, &Position)>()
             .single(&self.world);
-        let player_pos = player_pos.as_vec2f();
+        let player_pos = player_pos.as_wrapped();
         let level = self.world.resource::<Level>();
         let tile_meta = self.world.resource::<TileMeta>();
         {
@@ -136,7 +150,7 @@ impl Game {
             tile_meta.visible,
             cam_offset,
             tile_meta.offset,
-            &level,
+            level,
             TILE_DIM,
             engine,
         );
@@ -156,12 +170,10 @@ impl Game {
             Path::new("resources/fonts/JetbrainsMonoRegular.ttf"),
             settings,
         );
-        let (button_1_handle, button_1_bounds) = create_centered_button(
-            engine, font_handle, "Press Space to Toggle", 20
-        );
-        let (button_quit_handle, button_quit_bounds) = create_centered_button(
-            engine, font_handle, "Quit", 70
-        );
+        let (button_1_handle, button_1_bounds) =
+            create_centered_button(engine, font_handle, "Press Space to Toggle", 20);
+        let (button_quit_handle, button_quit_bounds) =
+            create_centered_button(engine, font_handle, "Quit", 70);
         self.world.insert_resource(MainMenuResources {
             button_1_handle,
             button_1_bounds,

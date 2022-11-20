@@ -11,6 +11,7 @@ pub struct Level {
     pub foreground_tiles: HashMap<Vec2, Vec2>,
     pub collision: HashSet<Vec2>,
     pub entities: HashMap<Vec2, String>,
+    pub bfs_flow_field_z: HashMap<Vec2, i16>,
 }
 
 impl Level {
@@ -22,6 +23,13 @@ impl Level {
             foreground_tiles: None,
             collision: None,
             entities: None,
+        }
+    }
+    pub fn reset_flow_field(&mut self) {
+        self.bfs_flow_field_z =
+            HashMap::from_iter(self.background_tiles.keys().map(|key| (*key, 0_i16)));
+        for pos in &self.collision {
+            self.bfs_flow_field_z.insert(*pos, -1);
         }
     }
 }
@@ -55,7 +63,7 @@ impl LevelBuilder {
     }
     pub fn build(&self) -> Level {
         if let Some(background_tiles) = self.background_tiles.clone() {
-            let foreground_tiles = self.foreground_tiles.clone().unwrap_or(HashMap::new());
+            let foreground_tiles = self.foreground_tiles.clone().unwrap_or_default();
             let tile_chain = background_tiles.keys().chain(foreground_tiles.keys());
             let min_x = tile_chain.clone().min_by_key(|v| v.x).unwrap();
             let min_y = tile_chain.clone().min_by_key(|v| v.y).unwrap();
@@ -64,8 +72,15 @@ impl LevelBuilder {
             let width = max_x.x - min_x.x;
             let height = max_y.y - min_y.y;
             let dimensions = Vec2::new(width, height);
-            let collision = self.collision.clone().unwrap_or(HashSet::new());
-            let entities = self.entities.clone().unwrap_or(HashMap::new());
+            let collision = self.collision.clone().unwrap_or_default();
+            let entities = self.entities.clone().unwrap_or_default();
+            let bfs_flow_field_z = HashMap::from_iter(
+                self.background_tiles
+                    .as_ref()
+                    .unwrap()
+                    .keys()
+                    .map(|key| (*key, 0_i16)),
+            );
             Level {
                 name: self.name.clone(),
                 spritesheet_handle: self.spritesheet_handle,
@@ -74,6 +89,7 @@ impl LevelBuilder {
                 foreground_tiles,
                 collision,
                 entities,
+                bfs_flow_field_z,
             }
         } else {
             panic!("LevelBuilder requires at least background tiles in order to be constructed");

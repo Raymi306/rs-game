@@ -1,12 +1,8 @@
-use engine::drawing::{
-    blit_rect, blit_rect_with_alpha, blit_with_alpha, draw_rectangle,
-};
-use engine::resource::ImageResource;
+use engine::drawing::{blit_rect, blit_rect_with_alpha, blit_with_alpha, draw_rectangle};
 use engine::types::{Color, Rect, Vec2, Vec2F};
 use engine::{Engine, Screen};
 
 use crate::resources::*;
-use crate::SCREEN_WIDTH;
 
 pub fn render_tiles(
     visible_tiles: Vec2,
@@ -119,8 +115,22 @@ pub fn render_enemy(pos: Vec2F, camera_offset: Vec2F, tile_dim: Vec2, screen: &m
 }
 
 pub fn render_main_menu(resources: &MainMenuResources, engine: &mut Engine) {
-    let btn_1 = engine.resource_manager.get_image(resources.button_1_handle).unwrap();
-    blit_with_alpha(btn_1, &mut engine.screen, resources.button_1_bounds.top_left);
-    let btn_2 = engine.resource_manager.get_image(resources.button_quit_handle).unwrap();
-    blit_with_alpha(btn_2, &mut engine.screen, resources.button_quit_bounds.top_left);
+    let btn_1 = engine
+        .resource_manager
+        .get_image(resources.button_1_handle)
+        .unwrap();
+    blit_with_alpha(
+        btn_1,
+        &mut engine.screen,
+        resources.button_1_bounds.top_left,
+    );
+    let btn_2 = engine
+        .resource_manager
+        .get_image(resources.button_quit_handle)
+        .unwrap();
+    blit_with_alpha(
+        btn_2,
+        &mut engine.screen,
+        resources.button_quit_bounds.top_left,
+    );
 }

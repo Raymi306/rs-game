@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use bevy_ecs::prelude::*;
@@ -9,7 +10,7 @@ use crate::resources::*;
 use crate::util::*;
 use crate::{GameRunMode, ShouldQuit};
 
-const BATCH_SIZE: usize = 1000;
+const BATCH_SIZE: usize = 64;
 
 pub fn is_in_game(state: Res<GameRunMode>) -> ShouldRun {
     match state.as_ref() {
@@ -34,30 +35,173 @@ pub fn handle_spacebar(input: Res<WinitInputHelper>, mut state: ResMut<GameRunMo
     }
 }
 
-pub fn handle_quit_button(input: Res<WinitInputHelper>, mmr: Res<MainMenuResources>, mut should_quit: ResMut<ShouldQuit>) {
+pub fn handle_quit_button(
+    input: Res<WinitInputHelper>,
+    mmr: Res<MainMenuResources>,
+    mut should_quit: ResMut<ShouldQuit>,
+) {
     if input.mouse_pressed(0) {
         if let Some((x, y)) = input.mouse() {
             let resolution = input.resolution().unwrap();
             let (x, y) = resolution_to_screen_space(resolution, (x, y));
-            if mmr.button_quit_bounds.point_intersects(Vec2::new(x as i32, y as i32)) {
+            if mmr
+                .button_quit_bounds
+                .point_intersects(Vec2::new(x as i32, y as i32))
+            {
                 *should_quit = true;
             }
         }
     }
 }
 
-pub fn handle_enemy_movement(
-    mut enemy_query: Query<(&Enemy, &Position, &mut Velocity, &Speed), Without<Player>>,
+pub fn handle_enemy_movement_dumb(
+    mut enemy_query: Query<(&Enemy, &Dumb, &Position, &mut Velocity, &Speed), Without<Player>>,
     player_query: Query<(&Player, &Position)>,
     elapsed_time: Res<Duration>,
 ) {
     let (_, player_pos) = player_query.single();
-    enemy_query.par_for_each_mut(BATCH_SIZE, |(_, pos, mut vel, spd)| {
-        let distance = f32::sqrt(f32::powi(player_pos.0.x - pos.0.x, 2) + f32::powi(player_pos.0.y - pos.0.y, 2));
+    enemy_query.par_for_each_mut(BATCH_SIZE, |(_, _, pos, mut vel, spd)| {
+        let distance = f32::sqrt(
+            f32::powi(player_pos.0.x - pos.0.x, 2) + f32::powi(player_pos.0.y - pos.0.y, 2),
+        );
         if distance < 3.5 && distance > 0.1 {
             vel.0.x = ((player_pos.0.x - pos.0.x) / distance) * 2.0;
             vel.0.y = ((player_pos.0.y - pos.0.y) / distance) * 2.0;
             vel.0 *= elapsed_time.as_secs_f32();
+        } else {
+            vel.0 *= 0.97 * elapsed_time.as_secs_f32();
+        }
+    });
+}
+
+pub fn propagate_pathfinding_wave(
+    player_query: Query<(&Player, &Position), Changed<IntPosition>>,
+    mut level: ResMut<Level>,
+) {
+    if let Ok((_, player_pos)) = player_query.get_single() {
+        level.reset_flow_field();
+        let mut nodes = HashSet::with_capacity(level.background_tiles.len());
+        nodes.insert((Vec2::from(player_pos.0), 1));
+        while !nodes.is_empty() {
+            let mut new_nodes = HashSet::with_capacity(4); // TODO expensive, reallocates each loop...
+            for node in nodes.iter() {
+                // discovery
+                let mut pos = node.0;
+                let distance = node.1;
+                level.bfs_flow_field_z.insert(pos, distance);
+                pos.offset_x(1);
+                if *level.bfs_flow_field_z.get(&pos).unwrap_or(&-1) == 0 {
+                    new_nodes.insert((pos, distance + 1));
+                }
+                pos.offset_x(-2);
+                if *level.bfs_flow_field_z.get(&pos).unwrap_or(&-1) == 0 {
+                    new_nodes.insert((pos, distance + 1));
+                }
+                pos.offset_x(1);
+                pos.offset_y(1);
+                if *level.bfs_flow_field_z.get(&pos).unwrap_or(&-1) == 0 {
+                    new_nodes.insert((pos, distance + 1));
+                }
+                pos.offset_y(-2);
+                if *level.bfs_flow_field_z.get(&pos).unwrap_or(&-1) == 0 {
+                    new_nodes.insert((pos, distance + 1));
+                }
+            }
+            nodes = new_nodes;
+        }
+    }
+}
+
+pub fn update_path_timers(mut path_query: Query<&mut Path>, elapsed_time: Res<Duration>) {
+    path_query.par_for_each_mut(BATCH_SIZE, |mut path| {
+        path.timer.update(*elapsed_time);
+    });
+}
+
+pub fn build_enemy_bfs_paths(
+    mut enemy_query: Query<(&Enemy, &Smart, &Position, &mut Path), Without<Player>>,
+    player_query: Query<(&Player, &Position, &IntPosition)>,
+    level: Res<Level>,
+) {
+    let level = level.as_ref();
+    if let Ok((_, player_pos, player_int_pos)) = player_query.get_single() {
+        enemy_query.par_for_each_mut(BATCH_SIZE, |(_, _, pos, mut path_export)| {
+            if !path_export.timer.done {
+                return;
+            }
+            let mut path = vec![Vec2F::from(pos.0)];
+            let mut pos_x = pos.0.x as i32;
+            let mut pos_y = pos.0.y as i32;
+            let mut no_path = false;
+            while !(pos_x == player_int_pos.0.x && pos_y == player_int_pos.0.y) && !no_path {
+                let mut neighbors = Vec::with_capacity(4);
+                if let Some(distance) = level.bfs_flow_field_z.get(&Vec2::new(pos_x, pos_y - 1)) {
+                    if distance > &0 {
+                        neighbors.push((pos_x, pos_y - 1, distance));
+                    }
+                }
+                if let Some(distance) = level.bfs_flow_field_z.get(&Vec2::new(pos_x + 1, pos_y)) {
+                    if distance > &0 {
+                        neighbors.push((pos_x + 1, pos_y, distance));
+                    }
+                }
+                if let Some(distance) = level.bfs_flow_field_z.get(&Vec2::new(pos_x, pos_y + 1)) {
+                    if distance > &0 {
+                        neighbors.push((pos_x, pos_y + 1, distance));
+                    }
+                }
+                if let Some(distance) = level.bfs_flow_field_z.get(&Vec2::new(pos_x - 1, pos_y)) {
+                    if distance > &0 {
+                        neighbors.push((pos_x - 1, pos_y, distance));
+                    }
+                }
+                neighbors.sort_unstable_by_key(|item| item.2);
+                if neighbors.is_empty() {
+                    no_path = true;
+                } else {
+                    let next_point = neighbors[0];
+                    pos_x = next_point.0;
+                    pos_y = next_point.1;
+                    path.push(Vec2F::new(pos_x as f32, pos_y as f32));
+                }
+            }
+            path.push(player_pos.0);
+            path_export.points = path;
+            path_export.next_point = path_export.points.get(0).map(|v| *v);
+            path_export.timer.restart();
+        });
+    }
+}
+
+pub fn handle_enemy_path_movement(
+    mut enemy_query: Query<(&Enemy, &Smart, &Position, &mut Velocity, &Speed, &mut Path)>,
+    player_query: Query<(&Player, &Position)>,
+    elapsed_time: Res<Duration>,
+) {
+    let (_, player_pos) = player_query.single();
+    enemy_query.par_for_each_mut(BATCH_SIZE, |(_, _, pos, mut vel, spd, mut path)| {
+        let distance = f32::sqrt(
+            f32::powi(player_pos.0.x - pos.0.x, 2) + f32::powi(player_pos.0.y - pos.0.y, 2),
+        );
+        if distance < 10.5 && distance > 0.1 {
+            if let Some(point) = path.next_point {
+                if f32::abs(pos.0.x - point.x as f32) < 0.01
+                    && f32::abs(pos.0.y - point.y as f32) < 0.01
+                    && path.points.len() > 0
+                {
+                    path.next_point = Some(path.points.remove(0));
+                }
+            }
+            if let Some(point) = path.next_point {
+                let point_distance = f32::sqrt(
+                    f32::powi(point.x as f32 - pos.0.x, 2) + f32::powi(point.y as f32 - pos.0.y, 2),
+                );
+                if point_distance != 0.0 {
+                    vel.0.x = ((point.x as f32 - pos.0.x) / point_distance) * 2.0;
+                    vel.0.y = ((point.y as f32 - pos.0.y) / point_distance) * 2.0;
+                    vel.0 *= elapsed_time.as_secs_f32();
+                }
+            }
         } else {
             vel.0 *= 0.97 * elapsed_time.as_secs_f32();
         }
@@ -96,11 +240,9 @@ pub fn handle_player_movement(
     let target_velocity = direction * spd * elapsed_time.as_secs_f32();
     let friction = 3.999 * elapsed_time.as_secs_f32();
     vel.0 = vel.0 + ((target_velocity - vel.0) * friction);
-    if !any_key_held(input, move_binds.as_ref()) {
-        if vel.0.magnitude() < 0.001 {
-            vel.0.x = 0.0;
-            vel.0.y = 0.0;
-        }
+    if !any_key_held(input, move_binds.as_ref()) && vel.0.magnitude() < 0.001 {
+        vel.0.x = 0.0;
+        vel.0.y = 0.0;
     }
 }
 
@@ -108,7 +250,8 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
     let level = level.as_ref();
     query.par_for_each_mut(BATCH_SIZE, |(mut pos, mut vel)| {
         let mut new_position = pos.0 + vel.0;
-        let leeway = 0.9_f32;
+        let leeway = 1.0_f32;
+        let border = 0.1_f32;
 
         // Collision handling
         if vel.0.x <= 0.0 {
@@ -116,15 +259,15 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             if level
                 .collision
                 .get(&Vec2::new(
-                    new_position.x.floor() as i32,
-                    pos.0.y.floor() as i32,
+                    (new_position.x + border).floor() as i32,
+                    (pos.0.y + border).floor() as i32,
                 ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
-                        new_position.x.floor() as i32,
-                        (pos.0.y + leeway).floor() as i32,
+                        (new_position.x + border).floor() as i32,
+                        (pos.0.y + leeway - border).floor() as i32,
                     ))
                     .is_some()
             {
@@ -136,15 +279,15 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             if level
                 .collision
                 .get(&Vec2::new(
-                    (new_position.x + 1.0).floor() as i32,
-                    pos.0.y.floor() as i32,
+                    (new_position.x + 1.0 - border).floor() as i32,
+                    (pos.0.y + border).floor() as i32,
                 ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
-                        (new_position.x + 1.0).floor() as i32,
-                        (pos.0.y + leeway).floor() as i32,
+                        (new_position.x + 1.0 - border).floor() as i32,
+                        (pos.0.y + leeway - border).floor() as i32,
                     ))
                     .is_some()
             {
@@ -157,15 +300,15 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             if level
                 .collision
                 .get(&Vec2::new(
-                    new_position.x.floor() as i32,
-                    new_position.y.floor() as i32,
+                    (new_position.x + border).floor() as i32,
+                    (new_position.y + border).floor() as i32,
                 ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
-                        (new_position.x + leeway).floor() as i32,
-                        new_position.y.floor() as i32,
+                        (new_position.x + leeway - border).floor() as i32,
+                        (new_position.y + border).floor() as i32,
                     ))
                     .is_some()
             {
@@ -177,15 +320,15 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
             if level
                 .collision
                 .get(&Vec2::new(
-                    new_position.x.floor() as i32,
-                    (new_position.y + 1.0).floor() as i32,
+                    (new_position.x + border).floor() as i32,
+                    (new_position.y + 1.0 - border).floor() as i32,
                 ))
                 .is_some()
                 || level
                     .collision
                     .get(&Vec2::new(
-                        (new_position.x + leeway).floor() as i32,
-                        (new_position.y + 1.0).floor() as i32,
+                        (new_position.x + leeway - border).floor() as i32,
+                        (new_position.y + 1.0 - border).floor() as i32,
                     ))
                     .is_some()
             {
@@ -195,6 +338,17 @@ pub fn handle_collision(mut query: Query<(&mut Position, &mut Velocity)>, level:
         }
         pos.0 = new_position;
     });
+}
+
+pub fn update_player_trunc_pos(
+    mut player_query: Query<(&Player, &Position, &mut IntPosition), Changed<Position>>,
+) {
+    if let Ok((_, pos, mut int_pos)) = player_query.get_single_mut() {
+        if int_pos.0 != Vec2::from(pos.0) {
+            int_pos.0.x = pos.0.x as i32;
+            int_pos.0.y = pos.0.y as i32;
+        }
+    }
 }
 
 pub fn handle_player_camera(

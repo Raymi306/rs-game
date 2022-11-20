@@ -1,4 +1,4 @@
-use crate::{SCREEN_WIDTH, SCREEN_HEIGHT};
+use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use engine::types::{VirtualKeyCode, WinitInputHelper};
 
 pub fn any_key_held(input: &WinitInputHelper, keys: &[VirtualKeyCode]) -> bool {
